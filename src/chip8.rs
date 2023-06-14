@@ -42,9 +42,9 @@ impl Chip8 {
         }
     }
 
-    fn sys() { unimplemented!(); }
+    fn sys(&mut self, _arg1: u16) { unimplemented!(); }
 
-    fn cls(&mut self) {
+    fn clear_screen(&mut self) {
         self.display = [0; 64*32];
     }
 
@@ -69,7 +69,7 @@ impl Chip8 {
         }
     }
 
-    fn skip_next_not_eq(&mut self, arg1: u8, arg2: u8) {
+    fn skip_next_ne(&mut self, arg1: u8, arg2: u8) {
         if self.registers[arg1 as usize] != arg2 {
             self.pc = self.pc.saturating_add(2);
         }
@@ -134,7 +134,7 @@ impl Chip8 {
         self.registers[arg1 as usize] <<= 1;
     }
 
-    fn skip_not_eq_reg(&mut self, arg1: u8, arg2: u8) {
+    fn skip_ne_reg(&mut self, arg1: u8, arg2: u8) {
         if self.registers[arg1 as usize] != self.registers[arg2 as usize] {
             self.pc = self.pc.saturating_add(2);
         }
@@ -152,15 +152,15 @@ impl Chip8 {
         self.registers[arg1 as usize] = arg2 & rand::random::<u8>();
     }
 
-    fn draw_sprite() { todo!() }
-    fn skip_input() { todo!() }
-    fn skip_not_input() { todo!() }
+    fn draw_sprite(&mut self, arg1: u8, arg2: u8, arg3: u8) { todo!() }
+    fn skip_input(&mut self, arg1: u8) { todo!() }
+    fn skip_not_input(&mut self, arg1: u8) { todo!() }
 
     fn load_reg_from_delay_timer(&mut self, arg1: u8) {
         self.registers[arg1 as usize] = self.dt;
     }
 
-    fn load_input() { todo!() }
+    fn load_input(&mut self, arg1: u8) { todo!() }
     fn load_delay_timer_from_reg(&mut self, arg1: u8) {
         self.dt = self.registers[arg1 as usize];
     }
@@ -174,7 +174,7 @@ impl Chip8 {
         self.i = result;
     }
 
-    fn load_sprite_location() { todo!() }
+    fn load_sprite_location(&mut self, arg1: u8) { todo!() }
     fn load_binary_coded_decimal(&mut self, arg1: u8) {
         let mut value = self.registers[arg1 as usize];
         let i = self.i as usize;
@@ -195,7 +195,65 @@ impl Chip8 {
         }
     }
 
-    fn fetch(&mut self)
+    fn step(&mut self) {
+        if let [jj, kk] = self.memory[(self.pc as usize)..((self.pc + 2) as usize)] {
+            let op = jj & 0xF0;
+            let x = jj & 0x0F;
+            let y = kk & 0xF0;
+            let subop = kk & 0x0F;
+            let nnn: u16 = ((jj as u16) << 8) | (kk as u16);
+            match op {
+                0x0 => match nnn {
+                    0x0E0 => self.clear_screen(),
+                    0x0EE => self.ret(),
+                    _ => self.sys(nnn),
+                },
+                0x1 => self.jump(nnn),
+                0x2 => self.call(nnn),
+                0x3 => self.skip_next_eq(x, kk),
+                0x4 => self.skip_next_ne(x, kk),
+                0x5 if subop == 0x0 => self.skip_next_eq_reg(x, y),
+                0x6 => self.load_scalar(x, kk),
+                0x7 => self.add_scalar(x, kk),
+                0x8 => match subop {
+                    0x0 => self.load_reg(x, y),
+                    0x1 => self.or_reg(x, y),
+                    0x2 => self.and_reg(x, y),
+                    0x3 => self.xor_reg(x, y),
+                    0x4 => self.add_reg(x, y),
+                    0x5 => self.sub_reg(x, y),
+                    0x6 => self.shift_right(x),
+                    0x7 => self.subn_reg(x, y),
+                    0xE => self.shift_left(x),
+                    _ => panic!("Invalid instruction"),
+                },
+                0x9 if subop == 0x0 => self.skip_next_eq_reg(x, y),
+                0xA => self.load_i(nnn),
+                0xB => self.jump_reg0(nnn),
+                0xC => self.rand_and(x, kk),
+                0xD => self.draw_sprite(x, y, subop),
+                0xE => match kk {
+                    0x9E => self.skip_input(x),
+                    0xA1 => self.skip_not_input(x),
+                    _ => panic!("Invalid instruction"),
+                },
+                0xF => match kk {
+                    0x07 => self.load_reg_from_delay_timer(x),
+                    0x0A => self.load_input(x),
+                    0x15 => self.load_delay_timer_from_reg(x),
+                    0x18 => self.load_sound_timer_from_reg(x),
+                    0x1E => self.add_i_reg(x),
+                    0x29 => self.load_sprite_location(x),
+                    0x33 => self.load_binary_coded_decimal(x),
+                    0x55 => self.store_regs(x),
+                    0x65 => self.load_regs(x),
+                    _ => panic!("Invalid instruction"),
+                },
+                _ => panic!("Invalid instruction"),
+            }
+            self.pc = self.pc.saturating_add(2);
+        } else { panic!("Could not read instruction"); }
+    }
 }
 
 #[cfg(test)]
@@ -241,12 +299,12 @@ mod tests {
     }
 
     #[test]
-    fn test_skip_next_not_eq() {
+    fn test_skip_next_ne() {
         let mut chip8 = Chip8::new();
         let pc = chip8.pc;
-        chip8.skip_next_not_eq(0, 1);
+        chip8.skip_next_ne(0, 1);
         assert_eq!(chip8.pc, pc + 2);
-        chip8.skip_next_not_eq(0, 0);
+        chip8.skip_next_ne(0, 0);
         assert_eq!(chip8.pc, pc + 2);
     }
 
@@ -389,18 +447,18 @@ mod tests {
     }
 
     #[test]
-    fn test_skip_not_eq_reg() {
+    fn test_skip_ne_reg() {
         let mut chip8 = Chip8::new();
         chip8.registers[V0] = 0;
         chip8.registers[V1] = 1;
         let pc = chip8.pc;
-        chip8.skip_not_eq_reg(0, 1);
+        chip8.skip_ne_reg(0, 1);
         assert_eq!(chip8.pc, pc + 2);
 
         chip8.registers[V0] = 0;
         chip8.registers[V1] = 0;
         let pc = chip8.pc;
-        chip8.skip_not_eq_reg(0, 1);
+        chip8.skip_ne_reg(0, 1);
         assert_eq!(chip8.pc, pc);
     }
 
