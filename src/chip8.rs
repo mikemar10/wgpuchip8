@@ -1,3 +1,5 @@
+use std::sync::{Arc, Mutex, Condvar};
+
 const V0: usize = 0x0;
 const V1: usize = 0x1;
 const V2: usize = 0x2;
@@ -25,7 +27,7 @@ struct Chip8 {
     i: u16, // instruction pointer
     dt: u8, // delay timer
     st: u8, // sound timer
-    keyboard: u16,
+    keyboard: Arc<(Mutex<Option<u8>>, Condvar)>,
 }
 
 impl Chip8 {
@@ -40,7 +42,7 @@ impl Chip8 {
             i: 0,
             dt: 0,
             st: 0,
-            keyboard: 0,
+            keyboard: Arc::new((Mutex::new(None), Condvar::new())),
         }.initialize_digit_sprites()
     }
 
@@ -174,19 +176,39 @@ impl Chip8 {
         self.registers[arg1 as usize] = arg2 & rand::random::<u8>();
     }
 
-    fn draw_sprite(&mut self, arg1: u8, arg2: u8, arg3: u8) { todo!() }
+    fn draw_sprite(&mut self, arg1: u8, arg2: u8, arg3: u8) {
+        let x = self.registers[arg1 as usize] as usize;
+        let y = self.registers[arg2 as usize] as usize;
+        let n = (arg3 & 0x0F) as usize;
+        let i = self.i as usize;
+        let sprite_data = &self.memory[i..(i+n)];
+        for i in 0..n {
+            let source = sprite_data[i];
+            let target = &mut self.display[64*(y+i) + x];
+            let ones_before_blit = source.count_ones() + target.count_ones();
+            *target ^= source;
+            let ones_after_blit = target.count_ones();
+            self.registers[VF] = if ones_after_blit < ones_before_blit { 1 } else { 0 };
+        }
+    }
 
     fn skip_input(&mut self, arg1: u8) {
-        let key_down = (1<<arg1);
-        if self.keyboard & key_down == key_down {
-            self.pc = self.pc.saturating_add(2);
+        let (lock, _cvar) = &*self.keyboard;
+        let keyboard = lock.lock().unwrap();
+        if let Some(key_pressed) = *keyboard {
+            if key_pressed == arg1 {
+                self.pc = self.pc.saturating_add(2);
+            }
         }
     }
 
     fn skip_not_input(&mut self, arg1: u8) {
-        let key_down = (1<<arg1);
-        if self.keyboard & key_down != key_down {
-            self.pc = self.pc.saturating_add(2);
+        let (lock, _cvar) = &*self.keyboard;
+        let keyboard = lock.lock().unwrap();
+        if let Some(key_pressed) = *keyboard {
+            if key_pressed != arg1 {
+                self.pc = self.pc.saturating_add(2);
+            }
         }
     }
 
@@ -195,8 +217,14 @@ impl Chip8 {
     }
 
     fn load_input(&mut self, arg1: u8) {
-        //while self.keyboard == 0 {}
-        todo!();
+        let (lock, cvar) = &*self.keyboard;
+        let mut keyboard = lock.lock().unwrap();
+        while (*keyboard).is_none() {
+            keyboard = cvar.wait(keyboard).unwrap();
+        }
+        if let Some(key_pressed) = *keyboard {
+            self.registers[arg1 as usize] = key_pressed;
+        }
     }
 
     fn load_delay_timer_from_reg(&mut self, arg1: u8) {
@@ -212,7 +240,10 @@ impl Chip8 {
         self.i = result;
     }
 
-    fn load_sprite_location(&mut self, arg1: u8) { todo!() }
+    fn load_digit_sprite(&mut self, arg1: u8) {
+        self.i = (self.registers[arg1 as usize] as u16) * 5;
+    }
+
     fn load_binary_coded_decimal(&mut self, arg1: u8) {
         let mut value = self.registers[arg1 as usize];
         let i = self.i as usize;
@@ -281,7 +312,7 @@ impl Chip8 {
                     0x15 => self.load_delay_timer_from_reg(x),
                     0x18 => self.load_sound_timer_from_reg(x),
                     0x1E => self.add_i_reg(x),
-                    0x29 => self.load_sprite_location(x),
+                    0x29 => self.load_digit_sprite(x),
                     0x33 => self.load_binary_coded_decimal(x),
                     0x55 => self.store_regs(x),
                     0x65 => self.load_regs(x),
@@ -516,6 +547,8 @@ mod tests {
         assert_eq!(chip8.pc, pc + 0x123);
     }
 
+    // #TODO: this can fail randomly. The default ThreadRng isn't seedable so need to rework usage
+    // of rand for this function.
     #[test]
     fn test_rand_and() {
         let mut chip8 = Chip8::new();
