@@ -25,6 +25,7 @@ struct Chip8 {
     i: u16, // instruction pointer
     dt: u8, // delay timer
     st: u8, // sound timer
+    keyboard: u16,
 }
 
 impl Chip8 {
@@ -39,7 +40,28 @@ impl Chip8 {
             i: 0,
             dt: 0,
             st: 0,
-        }
+            keyboard: 0,
+        }.initialize_digit_sprites()
+    }
+
+    fn initialize_digit_sprites(mut self) -> Self {
+        self.memory[0..5].copy_from_slice(&[0xF0, 0x90, 0x90, 0x90, 0xF0]);   // 0
+        self.memory[5..10].copy_from_slice(&[0x20, 0x60, 0x20, 0x20, 0x70]);  // 1
+        self.memory[10..15].copy_from_slice(&[0xF0, 0x10, 0xF0, 0x80, 0xF0]); // 2
+        self.memory[15..20].copy_from_slice(&[0xF0, 0x10, 0xF0, 0x10, 0xF0]); // 3
+        self.memory[20..25].copy_from_slice(&[0x90, 0x90, 0xF0, 0x10, 0x10]); // 4
+        self.memory[25..30].copy_from_slice(&[0xF0, 0x80, 0xF0, 0x10, 0xF0]); // 5
+        self.memory[30..35].copy_from_slice(&[0xF0, 0x80, 0xF0, 0x90, 0xF0]); // 6
+        self.memory[35..40].copy_from_slice(&[0xF0, 0x10, 0x20, 0x40, 0x40]); // 7
+        self.memory[40..45].copy_from_slice(&[0xF0, 0x90, 0xF0, 0x90, 0xF0]); // 8
+        self.memory[45..50].copy_from_slice(&[0xF0, 0x90, 0xF0, 0x10, 0xF0]); // 9
+        self.memory[50..55].copy_from_slice(&[0xF0, 0x90, 0xF0, 0x90, 0x90]); // A
+        self.memory[55..60].copy_from_slice(&[0xE0, 0x90, 0xE0, 0x90, 0xE0]); // B
+        self.memory[60..65].copy_from_slice(&[0xF0, 0x80, 0x80, 0x80, 0xF0]); // C
+        self.memory[65..70].copy_from_slice(&[0xE0, 0x90, 0x90, 0x90, 0xE0]); // D
+        self.memory[70..75].copy_from_slice(&[0xF0, 0x80, 0xF0, 0x80, 0xF0]); // E
+        self.memory[75..80].copy_from_slice(&[0xF0, 0x80, 0xF0, 0x80, 0x80]); // F
+        self
     }
 
     fn sys(&mut self, _arg1: u16) { unimplemented!(); }
@@ -153,14 +175,30 @@ impl Chip8 {
     }
 
     fn draw_sprite(&mut self, arg1: u8, arg2: u8, arg3: u8) { todo!() }
-    fn skip_input(&mut self, arg1: u8) { todo!() }
-    fn skip_not_input(&mut self, arg1: u8) { todo!() }
+
+    fn skip_input(&mut self, arg1: u8) {
+        let key_down = (1<<arg1);
+        if self.keyboard & key_down == key_down {
+            self.pc = self.pc.saturating_add(2);
+        }
+    }
+
+    fn skip_not_input(&mut self, arg1: u8) {
+        let key_down = (1<<arg1);
+        if self.keyboard & key_down != key_down {
+            self.pc = self.pc.saturating_add(2);
+        }
+    }
 
     fn load_reg_from_delay_timer(&mut self, arg1: u8) {
         self.registers[arg1 as usize] = self.dt;
     }
 
-    fn load_input(&mut self, arg1: u8) { todo!() }
+    fn load_input(&mut self, arg1: u8) {
+        //while self.keyboard == 0 {}
+        todo!();
+    }
+
     fn load_delay_timer_from_reg(&mut self, arg1: u8) {
         self.dt = self.registers[arg1 as usize];
     }
