@@ -17,23 +17,23 @@ const VD: usize = 0xD;
 const VE: usize = 0xE;
 const VF: usize = 0xF;
 
-struct Chip8 {
-    display: [u8; 64*32],
+pub struct Chip8 {
+    pub display: [u8; 8*32],
     stack: [u16; 16],
-    memory: [u8; 4096],
-    registers: [u8; 16],
+    pub memory: [u8; 4096],
+    pub registers: [u8; 16],
     pc: u16, // program counter
     sp: u8, // stack pointer
     i: u16, // instruction pointer
     dt: u8, // delay timer
     st: u8, // sound timer
-    keyboard: Arc<(Mutex<Option<u8>>, Condvar)>,
+    pub keyboard: Arc<(Mutex<Option<u8>>, Condvar)>,
 }
 
 impl Chip8 {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
-            display: [0; 64*32],
+            display: [0; 8*32],
             stack: [0; 16],
             memory: [0; 4096],
             registers: [0; 16],
@@ -69,7 +69,7 @@ impl Chip8 {
     fn sys(&mut self, _arg1: u16) { unimplemented!(); }
 
     fn clear_screen(&mut self) {
-        self.display = [0; 64*32];
+        self.display = [0; 8*32];
     }
 
     fn ret(&mut self) {
@@ -184,11 +184,26 @@ impl Chip8 {
         let sprite_data = &self.memory[i..(i+n)];
         for i in 0..n {
             let source = sprite_data[i];
-            let target = &mut self.display[64*(y+i) + x];
-            let ones_before_blit = source.count_ones() + target.count_ones();
-            *target ^= source;
-            let ones_after_blit = target.count_ones();
-            self.registers[VF] = if ones_after_blit < ones_before_blit { 1 } else { 0 };
+            let offset = x % 8;
+            if offset == 0 {
+                let target = &mut self.display[8*(y+i) + x/8];
+                let ones_before_blit = source.count_ones() + target.count_ones();
+                *target ^= source;
+                let ones_after_blit = target.count_ones();
+                self.registers[VF] = if ones_after_blit < ones_before_blit { 1 } else { 0 };
+            } else {
+                let target_a = &mut self.display[8*(y+i) + x/8];
+                let source_a = source >> offset;
+                let mut ones_before_blit = source_a.count_ones() + target_a.count_ones();
+                *target_a ^= source_a;
+                let mut ones_after_blit = target_a.count_ones();
+                let target_b = &mut self.display[8*(y+i) + x/8 + 1];
+                let source_b = source << (8 - offset);
+                ones_before_blit += source_b.count_ones() + target_b.count_ones();
+                *target_b ^= source_b;
+                ones_after_blit += target_b.count_ones();
+                self.registers[VF] = if ones_after_blit < ones_before_blit { 1 } else { 0 };
+            }
         }
     }
 
@@ -264,11 +279,11 @@ impl Chip8 {
         }
     }
 
-    fn step(&mut self) {
+    pub fn step(&mut self) {
         if let [jj, kk] = self.memory[(self.pc as usize)..((self.pc + 2) as usize)] {
-            let op = jj & 0xF0;
+            let op = (jj & 0xF0) >> 4;
             let x = jj & 0x0F;
-            let y = kk & 0xF0;
+            let y = (kk & 0xF0) >> 4;
             let subop = kk & 0x0F;
             let nnn: u16 = ((jj as u16) << 8) | (kk as u16);
             match op {
