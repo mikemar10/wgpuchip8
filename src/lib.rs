@@ -232,7 +232,10 @@ pub fn run() {
     let mut blue_value = 0.0;
     let mut blue_inc = 0.001;
 
+    let ibm_splashscreen = include_bytes!("../roms/2-ibm-logo.ch8");
     let mut chip8 = Chip8::new();
+    chip8.memory[0x200..(0x200 + ibm_splashscreen.len())].copy_from_slice(&ibm_splashscreen[..]);
+    /*
     chip8.registers[0x0] = 0xF;
     chip8.memory[0x200] = 0xF0;
     chip8.memory[0x201] = 0x29;
@@ -242,6 +245,8 @@ pub fn run() {
     chip8.registers[0x0] = 32;
     chip8.registers[0x1] = 16;
     chip8.step();
+    */
+    for cycles in 0..20 { chip8.step(); }
     println!("Display:\n{:?}", chip8.display);
     let mut display_pixels: [u8; 64*32*4] = [0; 64*32*4];
     for byte in 0..chip8.display.len() {
