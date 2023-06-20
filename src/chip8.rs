@@ -5,10 +5,9 @@ mod stack;
 use memory::{Memory, MemoryAddress};
 use registers::Registers;
 use stack::Stack;
+use crate::util::*;
 use std::sync::{Arc, Mutex, Condvar};
 
-type Nibble = u8;
-type Byte = u8;
 type Keyboard = Arc<(Mutex<Option<u8>>, Condvar)>;
 type Display = [u8; 8*32];
 
@@ -120,10 +119,9 @@ impl Chip8 {
     fn draw_sprite(&mut self, arg1: u8, arg2: u8, arg3: u8) {
         let x = self.registers[arg1] as usize;
         let y = self.registers[arg2] as usize;
-        let n = (arg3 & 0x0F) as usize;
+        let n = low_nibble(arg3) as usize;
         let sprite_data = self.memory.read_bytes(self.i, n);
-        for i in 0..n {
-            let source = sprite_data[i];
+        for (i, source) in sprite_data.iter().enumerate() {
             let offset = x % 8;
             if offset == 0 {
                 let target = &mut self.display[8*(y+i) + x/8];
@@ -206,10 +204,10 @@ impl Chip8 {
 
     pub fn step(&mut self) {
         if let &[jj, kk] = self.memory.read_bytes(self.pc, 2) {
-            let op = (jj & 0xF0) >> 4;
-            let x = jj & 0x0F;
-            let y = (kk & 0xF0) >> 4;
-            let subop = kk & 0x0F;
+            let op = high_nibble(jj);
+            let x = low_nibble(jj);
+            let y = high_nibble(kk);
+            let subop = low_nibble(kk);
             let nnn: u16 = ((jj as u16) << 8) | (kk as u16);
             match op {
                 0x0 => match nnn {

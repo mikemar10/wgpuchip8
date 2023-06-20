@@ -1,12 +1,13 @@
+mod chip8;
+mod util;
+
+use chip8::Chip8;
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
 };
 use wgpu::util::DeviceExt;
-
-mod chip8;
-use chip8::Chip8;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -230,7 +231,7 @@ pub fn run() {
     });
 
     let mut blue_value = 0.0;
-    let mut blue_inc = 0.001;
+    let mut blue_inc = 0.01;
 
     let ibm_splashscreen = include_bytes!("../roms/2-ibm-logo.ch8");
     let mut chip8 = Chip8::new();
@@ -330,7 +331,7 @@ pub fn run() {
                 output.present();
 
                 blue_value += blue_inc;
-                if blue_value < 0.0 || blue_value > 1.0 {
+                if !(0.0..=1.0).contains(&blue_value) {
                     blue_inc = -blue_inc;
                 }
             },
