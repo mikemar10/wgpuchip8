@@ -234,7 +234,8 @@ pub fn run() {
 
     let ibm_splashscreen = include_bytes!("../roms/2-ibm-logo.ch8");
     let mut chip8 = Chip8::new();
-    chip8.memory[0x200..(0x200 + ibm_splashscreen.len())].copy_from_slice(&ibm_splashscreen[..]);
+    chip8.load_program(&ibm_splashscreen[..]);
+    //chip8.memory[0x200..(0x200 + ibm_splashscreen.len())].copy_from_slice(&ibm_splashscreen[..]);
     /*
     chip8.registers[0x0] = 0xF;
     chip8.memory[0x200] = 0xF0;
@@ -246,38 +247,9 @@ pub fn run() {
     chip8.registers[0x1] = 16;
     chip8.step();
     */
-    for cycles in 0..20 { chip8.step(); }
-    println!("Display:\n{:?}", chip8.display);
-    let mut display_pixels: [u8; 64*32*4] = [0; 64*32*4];
-    for byte in 0..chip8.display.len() {
-        let pixels = chip8.display[byte];
-        for bit in (0..8).rev() {
-            let color = if (pixels >> bit) & 1 == 1 { 255 } else { 0 };
-            display_pixels[(byte*8*4)+(7-bit)*4] = color;
-            display_pixels[(byte*8*4)+(7-bit)*4+1] = color;
-            display_pixels[(byte*8*4)+(7-bit)*4+2] = color;
-            display_pixels[(byte*8*4)+(7-bit)*4+3] = 255;
-        }
-    }
-    println!("display_pixels: {:?}", display_pixels);
-
-    queue.write_texture(
-        wgpu::ImageCopyTexture {
-            texture: &diffuse_texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        &display_pixels,
-        wgpu::ImageDataLayout {
-            offset: 0,
-            bytes_per_row: Some(4 * 64u32),
-            rows_per_image: Some(32u32),
-        },
-        texture_size,
-        );
-
+    //for cycles in 0..20 { chip8.step(); }
     event_loop.run(move |event, _, control_flow| {
+        chip8.step();
         *control_flow = ControlFlow::Wait;
 
         match event {
@@ -294,6 +266,34 @@ pub fn run() {
                 }
             },
             Event::RedrawRequested(_) => {
+                let mut display_pixels: [u8; 64*32*4] = [0; 64*32*4];
+                for byte in 0..chip8.display.len() {
+                    let pixels = chip8.display[byte];
+                    for bit in (0..8).rev() {
+                        let color = if (pixels >> bit) & 1 == 1 { 255 } else { 0 };
+                        display_pixels[(byte*8*4)+(7-bit)*4] = color;
+                        display_pixels[(byte*8*4)+(7-bit)*4+1] = color;
+                        display_pixels[(byte*8*4)+(7-bit)*4+2] = color;
+                        display_pixels[(byte*8*4)+(7-bit)*4+3] = 255;
+                    }
+                }
+
+                queue.write_texture(
+                    wgpu::ImageCopyTexture {
+                        texture: &diffuse_texture,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d::ZERO,
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    &display_pixels,
+                    wgpu::ImageDataLayout {
+                        offset: 0,
+                        bytes_per_row: Some(4 * 64u32),
+                        rows_per_image: Some(32u32),
+                    },
+                    texture_size,
+                );
+
                 let output = surface.get_current_texture().unwrap();
                 let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
                 let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
